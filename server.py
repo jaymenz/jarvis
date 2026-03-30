@@ -33,25 +33,33 @@ from pathlib import Path
 from typing import Optional
 
 import anthropic
+import ollama
 import httpx
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from actions import execute_action, monitor_build, open_terminal, open_browser, open_claude_in_project, _generate_project_name, prompt_existing_terminal
-from work_mode import WorkSession, is_casual_question
-from screen import get_active_windows, take_screenshot, describe_screen, format_windows_for_context
-from calendar_access import get_todays_events, get_upcoming_events, get_next_event, format_events_for_context, format_schedule_summary, refresh_cache as refresh_calendar_cache
-from mail_access import get_unread_count, get_unread_messages, get_recent_messages, search_mail, read_message, format_unread_summary, format_messages_for_context, format_messages_for_voice
-from memory import (
+from integrations.actions import execute_action, monitor_build, open_terminal, open_browser, open_claude_in_project, _generate_project_name, prompt_existing_terminal
+from core.work_mode import WorkSession, is_casual_question
+from integrations.screen import get_active_windows, take_screenshot, describe_screen, format_windows_for_context
+from integrations.calendar_access import (
+    get_todays_events, get_upcoming_events, get_next_event,
+    get_this_week_events, get_this_month_events, open_calendar,
+    format_events_for_context, format_schedule_summary,
+    format_week_summary, format_month_summary,
+    refresh_cache as refresh_calendar_cache,
+    _fetch_range_all_calendars,
+)
+from integrations.mail_access import get_unread_count, get_unread_messages, get_recent_messages, search_mail, read_message, format_unread_summary, format_messages_for_context, format_messages_for_voice
+from memory.memory import (
     remember, recall, get_open_tasks, create_task, complete_task, search_tasks,
     create_note, search_notes, get_tasks_for_date, build_memory_context,
     format_tasks_for_voice, extract_memories, get_important_memories,
 )
-from notes_access import get_recent_notes, read_note, search_notes_apple, create_apple_note
-from dispatch_registry import DispatchRegistry
-from planner import TaskPlanner, detect_planning_mode, BYPASS_PHRASES
+from integrations.notes_access import get_recent_notes, read_note, search_notes_apple, create_apple_note
+from memory.dispatch_registry import DispatchRegistry
+from core.planner import TaskPlanner, detect_planning_mode, BYPASS_PHRASES
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
 log = logging.getLogger("jarvis")
@@ -61,6 +69,8 @@ log = logging.getLogger("jarvis")
 # ---------------------------------------------------------------------------
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:latest")  # Default to llama3.1
+USE_OLLAMA = os.getenv("USE_OLLAMA", "true").lower() == "true"  # Default to Ollama
 FISH_API_KEY = os.getenv("FISH_API_KEY", "")
 FISH_VOICE_ID = os.getenv("FISH_VOICE_ID", "612b878b113047d9a770c069c8b4fdfe")  # JARVIS (MCU)
 FISH_API_URL = "https://api.fish.audio/v1/tts"
@@ -95,7 +105,7 @@ CONVERSATION STYLE:
 - When you don't know something: "I'm afraid I don't have that information, sir" not "I don't know"
 
 SELF-AWARENESS:
-You ARE the JARVIS project at {project_dir} on {user_name}'s computer. Your code is Python (FastAPI server, WebSocket voice, Fish Audio TTS, Anthropic API). You were built by {user_name}. If asked about yourself, your code, how you work, or your line count — use [ACTION:PROMPT_PROJECT] to check the jarvis project. You have full access to your own source code.
+You ARE the JARVIS project at {project_dir} on {user_name}'s computer. Your code is Python (FastAPI server, WebSocket voice, Fish Audio TTS, Ollama LLM). You were built by {user_name}. If asked about yourself, your code, how you work, or your line count — use [ACTION:PROMPT_PROJECT] to check the jarvis project. You have full access to your own source code.
 
 YOUR CAPABILITIES (these are REAL and ACTIVE — you CAN do all of these RIGHT NOW):
 - You CAN open Terminal.app via AppleScript
@@ -186,6 +196,8 @@ When you decide the user needs something DONE (not just discussed), include an a
 - [ACTION:BROWSE] url or search query — when user wants to see a webpage or search result in Chrome
 - [ACTION:RESEARCH] detailed research brief — when user wants real research with real data. Claude Code will browse the web, find real listings/data, and create a report document. Give it a detailed brief of what to find.
 - [ACTION:OPEN_TERMINAL] — when user just wants a fresh Claude Code terminal with no specific project
+- [ACTION:OPEN_CALENDAR] — when user wants to open Apple Calendar
+- [ACTION:CLOSE_CALENDAR] — when user wants to close Apple Calendar
 - [ACTION:PROMPT_PROJECT] project_name ||| prompt — THIS IS YOUR MOST POWERFUL ACTION. Use it whenever the user wants to work on, jump into, resume, check on, or interact with ANY existing project. You connect directly to Claude Code in that project and can read its response. Craft a clear prompt based on what the user wants. Examples:
   "jump into client engine" → [ACTION:PROMPT_PROJECT] The Client Engine ||| What is the current state of this project? Summarize what was being worked on most recently.
   "check for improvements on my-app" → [ACTION:PROMPT_PROJECT] my-app ||| Review the project and identify improvements we should make.
@@ -734,7 +746,7 @@ def extract_action(response: str) -> tuple[str, dict | None]:
     Returns (clean_text_for_tts, action_dict_or_none).
     """
     match = _action_re.search(
-        r'\[ACTION:(BUILD|BROWSE|RESEARCH|OPEN_TERMINAL|PROMPT_PROJECT|ADD_TASK|ADD_NOTE|COMPLETE_TASK|REMEMBER|CREATE_NOTE|READ_NOTE)\]\s*(.*?)$',
+        r'\[ACTION:(BUILD|BROWSE|RESEARCH|OPEN_TERMINAL|PROMPT_PROJECT|ADD_TASK|ADD_NOTE|COMPLETE_TASK|REMEMBER|CREATE_NOTE|READ_NOTE|OPEN_CALENDAR|CLOSE_CALENDAR)\]\s*(.*?)$',
         response, _action_re.DOTALL,
     )
     if match:
@@ -870,6 +882,27 @@ async def _execute_open_terminal():
     except Exception as e:
         log.error(f"Open terminal failed: {e}")
 
+async def _execute_open_calendar():
+    """Execute an open-calendar action from an LLM-embedded [ACTION:OPEN_CALENDAR] tag."""
+    try:
+        from integrations.actions import open_calendar
+        result = await open_calendar()
+        return result
+    except Exception as e:
+        log.error(f"Open calendar failed: {e}")
+        return {"success": False, "confirmation": "I had trouble opening Calendar, sir."}
+
+
+async def _execute_close_calendar():
+    """Execute a close-calendar action from an LLM-embedded [ACTION:CLOSE_CALENDAR] tag."""
+    try:
+        from integrations.actions import close_calendar
+        result = await close_calendar()
+        return result
+    except Exception as e:
+        log.error(f"Close calendar failed: {e}")
+        return {"success": False, "confirmation": "I had trouble closing Calendar, sir."}
+
 
 def _find_project_dir(project_name: str) -> str | None:
     """Find a project directory by name from cached projects or Desktop."""
@@ -877,9 +910,12 @@ def _find_project_dir(project_name: str) -> str | None:
         if project_name.lower() in p.get("name", "").lower():
             return p.get("path")
     desktop = Path.home() / "Desktop"
-    for d in desktop.iterdir():
-        if d.is_dir() and project_name.lower() in d.name.lower():
-            return str(d)
+    try:
+        for d in desktop.iterdir():
+            if d.is_dir() and project_name.lower() in d.name.lower():
+                return str(d)
+    except PermissionError:
+        log.warning("Cannot access Desktop directory due to permissions")
     return None
 
 
@@ -1072,12 +1108,12 @@ async def synthesize_speech(text: str) -> Optional[bytes]:
 
 async def generate_response(
     text: str,
-    client: anthropic.AsyncAnthropic,
+    client: Optional[anthropic.AsyncAnthropic],
     task_mgr: ClaudeTaskManager,
     projects: list[dict],
     conversation_history: list[dict],
 ) -> str:
-    """Generate a JARVIS response using Anthropic API."""
+    """Generate a JARVIS response using Ollama or Anthropic API."""
     now = datetime.now()
     current_time = now.strftime("%A, %B %d, %Y at %I:%M %p")
 
@@ -1119,14 +1155,31 @@ async def generate_response(
         messages = messages + [{"role": "user", "content": text}]
 
     try:
-        response = await client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=250,  # Extra room for [ACTION:X] tags
-            system=system,
-            messages=messages,
-        )
-        track_usage(response)
-        return response.content[0].text
+        if USE_OLLAMA:
+            # Use Ollama
+            # Convert messages to Ollama format
+            ollama_messages = [{"role": "system", "content": system}]
+            for msg in messages:
+                ollama_messages.append({"role": msg["role"], "content": msg["content"]})
+
+            response = await ollama.AsyncClient().chat(
+                model=OLLAMA_MODEL,
+                messages=ollama_messages,
+                options={"num_predict": 250}  # Similar to max_tokens
+            )
+            # Track usage (approximate)
+            _append_usage_entry(0, len(response.message.content.split()), "ollama")
+            return response.message.content
+        else:
+            # Use Anthropic
+            response = await client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=250,  # Extra room for [ACTION:X] tags
+                system=system,
+                messages=messages,
+            )
+            track_usage(response)
+            return response.content[0].text
     except Exception as e:
         log.error(f"LLM error: {e}")
         return "Apologies, sir. I'm having trouble connecting to my language systems."
@@ -1314,10 +1367,13 @@ return windowList
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     global anthropic_client, cached_projects
-    if ANTHROPIC_API_KEY:
+    if USE_OLLAMA:
+        log.info(f"Using Ollama with model: {OLLAMA_MODEL}")
+        # Ollama client doesn't need initialization here - we'll use it directly
+    elif ANTHROPIC_API_KEY:
         anthropic_client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
     else:
-        log.warning("ANTHROPIC_API_KEY not set — LLM features disabled")
+        log.warning("Neither Ollama nor ANTHROPIC_API_KEY configured — LLM features disabled")
     cached_projects = []
 
     # Start context refresh in a separate thread (never touches event loop)
@@ -1453,7 +1509,29 @@ def detect_action_fast(text: str) -> dict | None:
                              "what's open", "whats open", "what apps are open"]):
         return {"action": "describe_screen"}
 
-    # Calendar — explicit schedule requests
+    # Calendar — open the app
+    if any(p in t for p in ["open calendar", "open my calendar", "show calendar",
+                             "show my calendar", "launch calendar"]):
+        return {"action": "open_calendar"}
+
+    # Calendar — week view
+    if any(p in t for p in ["this week", "my schedule this week", "what do i have this week",
+                             "what's this week", "whats this week", "weekly schedule",
+                             "rest of the week", "week ahead"]):
+        return {"action": "check_calendar_week"}
+
+    # Calendar — month view
+    if any(p in t for p in ["this month", "my schedule this month", "what do i have this month",
+                             "what's this month", "whats this month", "monthly schedule",
+                             "rest of the month", "month ahead"]):
+        return {"action": "check_calendar_month"}
+
+    # Calendar — tomorrow
+    if any(p in t for p in ["tomorrow", "what do i have tomorrow", "my schedule tomorrow",
+                             "what's tomorrow", "whats tomorrow", "anything tomorrow"]):
+        return {"action": "check_calendar_tomorrow"}
+
+    # Calendar — today (explicit schedule requests)
     if any(p in t for p in ["what's my schedule", "whats my schedule", "what's on my calendar",
                              "whats on my calendar", "do i have any meetings", "any meetings",
                              "what's next on my calendar", "my schedule today",
@@ -1587,7 +1665,7 @@ async def _lookup_and_report(lookup_type: str, lookup_fn, ws):
         try:
             await ws.send_json({"type": "status", "state": "speaking"})
             if audio:
-                await ws.send_json({"type": "audio", "data": audio, "text": result_text})
+                await ws.send_json({"type": "audio", "data": base64.b64encode(audio).decode(), "text": result_text})
             else:
                 await ws.send_json({"type": "text", "text": result_text})
             await ws.send_json({"type": "status", "state": "idle"})
@@ -1603,7 +1681,7 @@ async def _lookup_and_report(lookup_type: str, lookup_fn, ws):
             audio = await synthesize_speech(fallback)
             await ws.send_json({"type": "status", "state": "speaking"})
             if audio:
-                await ws.send_json({"type": "audio", "data": audio, "text": fallback})
+                await ws.send_json({"type": "audio", "data": base64.b64encode(audio).decode(), "text": fallback})
             await ws.send_json({"type": "status", "state": "idle"})
         except Exception:
             pass
@@ -1623,6 +1701,39 @@ async def _do_calendar_lookup() -> str:
     if events:
         _ctx_cache["calendar"] = format_events_for_context(events)
     return format_schedule_summary(events)
+
+
+async def _do_calendar_tomorrow_lookup() -> str:
+    """Fetch tomorrow's events."""
+    from datetime import date, timedelta
+    tomorrow = date.today() + timedelta(days=1)
+    events = await _fetch_range_all_calendars(tomorrow, tomorrow)
+    if not events:
+        return "Your schedule is clear tomorrow, sir."
+    count = len(events)
+    summaries = []
+    for evt in events[:5]:
+        if evt.get("all_day"):
+            summaries.append(f"{evt['title']} all day")
+        else:
+            summaries.append(f"{evt['title']} at {evt['start']}")
+    result = f"Tomorrow you have {count} event{'s' if count != 1 else ''}. "
+    result += ". ".join(summaries[:3])
+    if count > 3:
+        result += f". And {count - 3} more."
+    return result
+
+
+async def _do_calendar_week_lookup() -> str:
+    """Fetch this week's events."""
+    events = await get_this_week_events()
+    return format_week_summary(events)
+
+
+async def _do_calendar_month_lookup() -> str:
+    """Fetch this month's events."""
+    events = await get_this_month_events()
+    return format_month_summary(events)
 
 
 async def _do_mail_lookup() -> str:
@@ -1647,17 +1758,7 @@ async def _do_mail_lookup() -> str:
 
 async def _do_screen_lookup() -> str:
     """Screen describe — runs in thread."""
-    if anthropic_client:
-        return await describe_screen(anthropic_client)
-    windows = await get_active_windows()
-    if windows:
-        apps = set(w["app"] for w in windows)
-        active = next((w for w in windows if w["frontmost"]), None)
-        result = f"You have {', '.join(apps)} open."
-        if active:
-            result += f" Currently focused on {active['app']}: {active['title']}."
-        return result
-    return "Couldn't see the screen, sir."
+    return await describe_screen(anthropic_client, USE_OLLAMA, OLLAMA_MODEL)
 
 
 def get_lookup_status() -> str:
@@ -1871,7 +1972,7 @@ async def voice_handler(ws: WebSocket):
                 await ws.send_json({"type": "status", "state": "speaking"})
                 audio = await synthesize_speech(tts)
                 if audio:
-                    await ws.send_json({"type": "audio", "data": audio, "text": response_text})
+                    await ws.send_json({"type": "audio", "data": base64.b64encode(audio).decode(), "text": response_text})
                 else:
                     await ws.send_json({"type": "text", "text": response_text})
                 continue
@@ -2035,9 +2136,21 @@ async def voice_handler(ws: WebSocket):
                         elif action["action"] == "describe_screen":
                             response_text = "Taking a look now, sir."
                             asyncio.create_task(_lookup_and_report("screen", _do_screen_lookup, ws))
+                        elif action["action"] == "open_calendar":
+                            await open_calendar()
+                            response_text = "Calendar is open, sir."
                         elif action["action"] == "check_calendar":
                             response_text = "Checking your calendar now, sir."
                             asyncio.create_task(_lookup_and_report("calendar", _do_calendar_lookup, ws))
+                        elif action["action"] == "check_calendar_tomorrow":
+                            response_text = "Checking tomorrow's schedule, sir."
+                            asyncio.create_task(_lookup_and_report("calendar_tomorrow", _do_calendar_tomorrow_lookup, ws))
+                        elif action["action"] == "check_calendar_week":
+                            response_text = "Pulling up your week, sir."
+                            asyncio.create_task(_lookup_and_report("calendar_week", _do_calendar_week_lookup, ws))
+                        elif action["action"] == "check_calendar_month":
+                            response_text = "Let me check your month, sir."
+                            asyncio.create_task(_lookup_and_report("calendar_month", _do_calendar_month_lookup, ws))
                         elif action["action"] == "check_mail":
                             response_text = "Checking your inbox now, sir."
                             asyncio.create_task(_lookup_and_report("mail", _do_mail_lookup, ws))
@@ -2065,7 +2178,7 @@ async def voice_handler(ws: WebSocket):
                         else:
                             response_text = "Understood, sir."
                     else:
-                        if not anthropic_client:
+                        if not anthropic_client and not USE_OLLAMA:
                             response_text = "API key not configured."
                         else:
                             response_text = await generate_response(
@@ -2075,6 +2188,7 @@ async def voice_handler(ws: WebSocket):
 
                             # Check for action tags embedded in LLM response
                             clean_response, embedded_action = extract_action(response_text)
+                            action_results = []
                             if embedded_action:
                                 log.info(f"LLM embedded action: {embedded_action}")
                                 response_text = clean_response
@@ -2193,6 +2307,16 @@ async def voice_handler(ws: WebSocket):
                                             except Exception:
                                                 pass
                                     asyncio.create_task(_read_and_report(embedded_action["target"].strip(), ws))
+                                elif embedded_action["action"] == "open_calendar":
+                                    result = await _execute_open_calendar()
+                                    action_results.append(result)
+                                elif embedded_action["action"] == "close_calendar":
+                                    result = await _execute_close_calendar()
+                                    action_results.append(result)
+
+                for result in action_results:
+                    if not result["success"]:
+                        response_text += f" Actually, {result['confirmation'].lower()}"
 
                 # Update history
                 history.append({"role": "user", "content": user_text})
@@ -2200,7 +2324,7 @@ async def voice_handler(ws: WebSocket):
 
                 # Extract memories in background (doesn't block response)
                 if anthropic_client and len(user_text) > 15:
-                    asyncio.create_task(extract_memories(user_text, response_text, anthropic_client))
+                    asyncio.create_task(extract_memories(user_text, response_text, anthropic_client, USE_OLLAMA, OLLAMA_MODEL))
 
                 # TTS
                 tts = strip_markdown_for_tts(response_text)

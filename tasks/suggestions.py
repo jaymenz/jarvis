@@ -10,7 +10,7 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Optional
 
-from qa import QAResult
+from tasks.qa import QAResult
 
 log = logging.getLogger("jarvis.suggestions")
 

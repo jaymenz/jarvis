@@ -206,6 +206,186 @@ async def get_next_event() -> dict | None:
     return events[0] if events else None
 
 
+async def _fetch_calendar_events_range(cal_name: str, start_date, end_date, timeout: float = 15.0) -> list[dict]:
+    """Fetch all events from one calendar, filter to a date range in Python."""
+    script = _BULK_SCRIPT.replace("{cal_name}", cal_name)
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "osascript", "-e", script,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        if proc.returncode != 0:
+            return []
+
+        raw = stdout.decode().strip()
+        if not raw:
+            return []
+
+        events = []
+        for line in raw.split("\n"):
+            parts = line.strip().split("|||")
+            if len(parts) < 3:
+                continue
+            date_str = parts[0].strip()
+            title = parts[1].strip()
+            all_day = parts[2].strip().lower() == "true"
+
+            try:
+                parsed = _parse_applescript_date(date_str)
+                if parsed and start_date <= parsed.date() <= end_date:
+                    time_str = "ALL_DAY" if all_day else parsed.strftime("%-I:%M %p")
+                    events.append({
+                        "calendar": cal_name,
+                        "title": title,
+                        "start": time_str,
+                        "start_dt": parsed,
+                        "date": parsed.date(),
+                        "all_day": all_day,
+                    })
+            except Exception:
+                continue
+
+        return events
+
+    except asyncio.TimeoutError:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        return []
+    except Exception:
+        return []
+
+
+async def _fetch_range_all_calendars(start_date, end_date) -> list[dict]:
+    """Fetch events across all calendars for a date range."""
+    global USER_CALENDARS, _auto_discovered
+    await _ensure_calendar_running()
+
+    if not USER_CALENDARS and not _auto_discovered:
+        _auto_discovered = True
+        discovered = await get_calendar_names()
+        if discovered:
+            USER_CALENDARS = discovered
+
+    if not USER_CALENDARS:
+        return []
+
+    all_events = []
+    batch_size = 2
+    for i in range(0, len(USER_CALENDARS), batch_size):
+        batch = USER_CALENDARS[i:i + batch_size]
+        results = await asyncio.gather(
+            *[_fetch_calendar_events_range(cal, start_date, end_date, timeout=15) for cal in batch],
+            return_exceptions=True,
+        )
+        for result in results:
+            if isinstance(result, list):
+                all_events.extend(result)
+
+    all_events.sort(key=lambda e: (e.get("date"), not e["all_day"], e.get("start_dt") or datetime.max))
+    return all_events
+
+
+async def get_this_week_events() -> list[dict]:
+    """Get events from today through end of the current week (Sunday)."""
+    today = datetime.now().date()
+    days_until_sunday = (6 - today.weekday()) % 7
+    end_of_week = today + timedelta(days=days_until_sunday if days_until_sunday > 0 else 7)
+    return await _fetch_range_all_calendars(today, end_of_week)
+
+
+async def get_this_month_events() -> list[dict]:
+    """Get events from today through end of the current month."""
+    today = datetime.now().date()
+    if today.month == 12:
+        end_of_month = today.replace(year=today.year + 1, month=1, day=1) - timedelta(days=1)
+    else:
+        end_of_month = today.replace(month=today.month + 1, day=1) - timedelta(days=1)
+    return await _fetch_range_all_calendars(today, end_of_month)
+
+
+async def open_calendar() -> None:
+    """Open Calendar.app in the foreground."""
+    global _calendar_launched
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "open", "-a", "Calendar",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await asyncio.wait_for(proc.communicate(), timeout=5)
+        _calendar_launched = True
+    except Exception as e:
+        log.warning(f"Failed to open Calendar: {e}")
+
+
+def format_week_summary(events: list[dict]) -> str:
+    """Format a voice-friendly summary of the week's schedule."""
+    if not events:
+        return "Your calendar is clear for the rest of the week, sir."
+
+    today = datetime.now().date()
+    by_day: dict = {}
+    for evt in events:
+        d = evt.get("date", today)
+        by_day.setdefault(d, []).append(evt)
+
+    count = len(events)
+    days = sorted(by_day.keys())
+    parts = []
+    for d in days[:5]:
+        day_name = "Today" if d == today else d.strftime("%A")
+        day_events = by_day[d]
+        if len(day_events) == 1:
+            evt = day_events[0]
+            if evt.get("all_day"):
+                parts.append(f"{day_name}: {evt['title']} all day")
+            else:
+                parts.append(f"{day_name}: {evt['title']} at {evt['start']}")
+        else:
+            parts.append(f"{day_name}: {len(day_events)} events")
+
+    result = f"You have {count} event{'s' if count != 1 else ''} this week. "
+    result += ". ".join(parts)
+    if len(days) > 5:
+        result += ". Plus more later in the week."
+    return result
+
+
+def format_month_summary(events: list[dict]) -> str:
+    """Format a voice-friendly summary of the month's schedule."""
+    if not events:
+        return "Your calendar is clear for the rest of the month, sir."
+
+    today = datetime.now().date()
+    count = len(events)
+    by_day: dict = {}
+    for evt in events:
+        d = evt.get("date", today)
+        by_day.setdefault(d, []).append(evt)
+
+    busy_days = len(by_day)
+    upcoming = events[:3]
+    parts = []
+    for evt in upcoming:
+        d = evt.get("date", today)
+        day_name = "Today" if d == today else d.strftime("%A, %B %-d")
+        if evt.get("all_day"):
+            parts.append(f"{evt['title']} on {day_name}")
+        else:
+            parts.append(f"{evt['title']} on {day_name} at {evt['start']}")
+
+    result = f"You have {count} event{'s' if count != 1 else ''} this month across {busy_days} day{'s' if busy_days != 1 else ''}. "
+    if parts:
+        result += "Coming up: " + ". ".join(parts)
+        if count > 3:
+            result += f". And {count - 3} more."
+    return result
+
+
 async def get_calendar_names() -> list[str]:
     """Get list of all calendar names."""
     await _ensure_calendar_running()

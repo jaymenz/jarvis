@@ -149,6 +149,50 @@ async def open_browser(url: str, browser: str = "chrome") -> dict:
     }
 
 
+async def open_calendar() -> dict:
+    """Open Apple Calendar and bring it to the foreground."""
+    script = (
+        'tell application "Calendar"\n'
+        "    activate\n"
+        "end tell"
+    )
+    proc = await asyncio.create_subprocess_exec(
+        "osascript", "-e", script,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await proc.communicate()
+    success = proc.returncode == 0
+    if not success:
+        log.error(f"open_calendar failed: {stderr.decode()}")
+    return {
+        "success": success,
+        "confirmation": "Calendar is open, sir." if success else "I had trouble opening Calendar, sir.",
+    }
+
+
+async def close_calendar() -> dict:
+    """Quit Apple Calendar."""
+    script = (
+        'tell application "Calendar"\n'
+        "    quit\n"
+        "end tell"
+    )
+    proc = await asyncio.create_subprocess_exec(
+        "osascript", "-e", script,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await proc.communicate()
+    success = proc.returncode == 0
+    if not success:
+        log.error(f"close_calendar failed: {stderr.decode()}")
+    return {
+        "success": success,
+        "confirmation": "Calendar closed, sir." if success else "I had trouble closing Calendar, sir.",
+    }
+
+
 # Keep backward compat
 async def open_chrome(url: str) -> dict:
     return await open_browser(url, "chrome")

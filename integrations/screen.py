@@ -8,6 +8,7 @@ Two capabilities:
 
 import asyncio
 import base64
+import ollama
 import json
 import logging
 import tempfile
@@ -151,14 +152,14 @@ async def take_screenshot(display_only: bool = True) -> str | None:
             pass
 
 
-async def describe_screen(anthropic_client) -> str:
+async def describe_screen(anthropic_client=None, use_ollama=False, ollama_model="llama3.1:latest") -> str:
     """Describe what's on the user's screen.
 
-    Tries screenshot + vision first. Falls back to window list + LLM summary.
+    Tries screenshot + vision first (Anthropic only). Falls back to window list + LLM summary.
     """
-    # Try screenshot + vision
+    # Try screenshot + vision (only works with Anthropic)
     screenshot_b64 = await take_screenshot()
-    if screenshot_b64 and anthropic_client:
+    if screenshot_b64 and anthropic_client and not use_ollama:
         try:
             response = await anthropic_client.messages.create(
                 model="claude-haiku-4-5-20251001",
@@ -212,18 +213,32 @@ async def describe_screen(anthropic_client) -> str:
         if bg_apps:
             context_parts.append(f"Background apps: {', '.join(bg_apps)}")
 
-    if anthropic_client and context_parts:
+    if (anthropic_client or use_ollama) and context_parts:
         try:
-            response = await anthropic_client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=100,
-                system=(
-                    "You are JARVIS. Given the user's open windows and apps, summarize "
-                    "what they appear to be working on in 1-2 sentences. Natural voice, no markdown."
-                ),
-                messages=[{"role": "user", "content": "Open windows:\n" + "\n".join(context_parts)}],
+            prompt = "Open windows:\n" + "\n".join(context_parts)
+            system_msg = (
+                "You are JARVIS. Given the user's open windows and apps, summarize "
+                "what they appear to be working on in 1-2 sentences. Natural voice, no markdown."
             )
-            return response.content[0].text
+
+            if use_ollama:
+                response = await ollama.AsyncClient().chat(
+                    model=ollama_model,
+                    messages=[
+                        {"role": "system", "content": system_msg},
+                        {"role": "user", "content": prompt}
+                    ],
+                    options={"num_predict": 100}
+                )
+                return response.message.content
+            else:
+                response = await anthropic_client.messages.create(
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=100,
+                    system=system_msg,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                return response.content[0].text
         except Exception:
             pass
 

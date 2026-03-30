@@ -13,6 +13,7 @@ so JARVIS gets smarter over time.
 import json
 import logging
 import sqlite3
+import ollama
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -402,30 +403,43 @@ def format_plan_for_voice(tasks: list[dict], events: list[dict]) -> str:
 # Memory extraction — learn from conversations
 # ---------------------------------------------------------------------------
 
-async def extract_memories(user_text: str, jarvis_response: str, anthropic_client) -> list[str]:
+async def extract_memories(user_text: str, jarvis_response: str, anthropic_client=None, use_ollama=False, ollama_model="llama3.1:latest") -> list[str]:
     """After a conversation turn, extract any facts worth remembering.
 
-    Uses Haiku to decide if anything in the exchange is worth storing.
+    Uses LLM to decide if anything in the exchange is worth storing.
     Returns list of memories stored.
     """
-    if not anthropic_client or len(user_text) < 15:
+    if (not anthropic_client and not use_ollama) or len(user_text) < 15:
         return []
 
     try:
-        response = await anthropic_client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=200,
-            system=(
-                "Extract facts worth remembering from this conversation. "
-                "Only extract CONCRETE facts: preferences, decisions, names, dates, plans, goals. "
-                "NOT opinions, greetings, or casual chat. "
-                "Return JSON array of objects: [{\"type\": \"fact|preference|project|person|decision\", \"content\": \"...\", \"importance\": 1-10}] "
-                "Return [] if nothing worth remembering. Be very selective."
-            ),
-            messages=[{"role": "user", "content": f"User: {user_text}\nJARVIS: {jarvis_response}"}],
+        system_msg = (
+            "Extract facts worth remembering from this conversation. "
+            "Only extract CONCRETE facts: preferences, decisions, names, dates, plans, goals. "
+            "NOT opinions, greetings, or casual chat. "
+            "Return JSON array of objects: [{\"type\": \"fact|preference|project|person|decision\", \"content\": \"...\", \"importance\": 1-10}] "
+            "Return [] if nothing worth remembering. Be very selective."
         )
+        user_msg = f"User: {user_text}\nJARVIS: {jarvis_response}"
 
-        text = response.content[0].text.strip()
+        if use_ollama:
+            response = await ollama.AsyncClient().chat(
+                model=ollama_model,
+                messages=[
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": user_msg}
+                ],
+                options={"num_predict": 200}
+            )
+            text = response.message.content.strip()
+        else:
+            response = await anthropic_client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=200,
+                system=system_msg,
+                messages=[{"role": "user", "content": user_msg}],
+            )
+            text = response.content[0].text.strip()
         # Parse JSON
         if text.startswith("["):
             items = json.loads(text)

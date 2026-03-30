@@ -17,7 +17,7 @@ from typing import Optional
 
 import anthropic
 
-from templates import TEMPLATES, get_template
+from tasks.templates import TEMPLATES, get_template
 
 log = logging.getLogger("jarvis.planner")
 
