@@ -39,3 +39,4 @@ desktop-overlay/node_modules/
 context/
 *.db-shm
 *.db-wal
+jarvis_env/
