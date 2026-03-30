@@ -98,7 +98,8 @@ const voiceInput = createVoiceInput(
 // ---------------------------------------------------------------------------
 
 audioPlayer.onFinished(() => {
-  transition("idle");
+  // Delay before re-enabling mic — prevents picking up echo of JARVIS's own voice
+  setTimeout(() => transition("idle"), 700);
 });
 
 // ---------------------------------------------------------------------------
