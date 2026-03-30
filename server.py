@@ -57,7 +57,13 @@ from memory.memory import (
     create_note, search_notes, get_tasks_for_date, build_memory_context,
     format_tasks_for_voice, extract_memories, get_important_memories,
 )
-from integrations.notes_access import get_recent_notes, read_note, search_notes_apple, create_apple_note
+from integrations.obsidian_access import (
+    get_recent_notes as obsidian_recent_notes,
+    read_note as obsidian_read_note,
+    search_notes as obsidian_search_notes,
+    create_note as obsidian_create_note,
+    format_recent_for_context as obsidian_context,
+)
 from memory.dispatch_registry import DispatchRegistry
 from core.planner import TaskPlanner, detect_planning_mode, BYPASS_PHRASES
 
@@ -117,7 +123,7 @@ YOUR CAPABILITIES (these are REAL and ACTIVE — you CAN do all of these RIGHT N
 - You CAN see what's on {user_name}'s screen — open windows, active apps, and screenshot vision
 - You CAN read {user_name}'s calendar — today's events, upcoming meetings, schedule overview
 - You CAN read {user_name}'s email (READ-ONLY) — unread count, recent messages, search by sender/subject. You CANNOT send, delete, or modify emails.
-- You CAN read Apple Notes and create NEW notes — but you CANNOT edit or delete existing notes
+- You CAN read and create notes in {user_name}'s Obsidian vault — search by title/content, read full notes, and create new linked notes with [[wikilinks]] and tags
 - You CAN manage tasks — create, complete, and list to-do items with priorities and due dates
 - You CAN help plan {user_name}'s day — combine calendar events, tasks, and priorities into an organized plan
 - You CAN remember facts about {user_name} — preferences, decisions, goals. Use [ACTION:REMEMBER] to store important info.
@@ -156,6 +162,11 @@ The user interacts with you through a web browser showing a particle orb visuali
 
 If asked about any of these, explain them briefly and naturally. If the user is having trouble, suggest the relevant control: "Try the settings panel — the gear icon in the top right." or "The mute button may be active, sir."
 
+APPLESCRIPT UNAVAILABILITY:
+If SCHEDULE or EMAIL context says "UNAVAILABLE", do NOT pretend you can read them. Say clearly:
+"I'm afraid Calendar access isn't available yet, sir — Automation permissions still need to be enabled in System Settings."
+Same for email, Terminal, Chrome, and screen awareness — if they fail, say so plainly. Never fake data or make up events/emails.
+
 SPEECH-TO-TEXT CORRECTIONS (the user speaks, speech recognition may mishear):
 - "Cloud code" or "cloud" = "Claude Code" or "Claude"
 - "Travis" = "JARVIS"
@@ -180,6 +191,9 @@ BANNED PHRASES — NEVER USE THESE:
 - "As an AI" (never break character)
 - "Let me know if" / "Feel free to"
 - Any sentence starting with "I"
+- "Shall we proceed" / "Shall we get started" / "Ready when you are"
+- "What would you like to discuss" / "What can I help you with"
+- Volunteering weather unprompted — only mention weather if the user asks
 
 INSTEAD SAY:
 - "Will do, sir."
@@ -209,9 +223,10 @@ When you decide the user needs something DONE (not just discussed), include an a
 - [ACTION:COMPLETE_TASK] task_id — mark a task as done.
 - [ACTION:REMEMBER] content — store an important fact about the user for future context.
   "I prefer React over Vue" → [ACTION:REMEMBER] User prefers React over Vue for frontend projects
-- [ACTION:CREATE_NOTE] title ||| body — create a new Apple Note. For saving plans, ideas, lists.
-  "save that as a note" → [ACTION:CREATE_NOTE] Day Plan March 19 ||| Morning: client calls. Afternoon: TikTok dashboard. Evening: JARVIS improvements.
-- [ACTION:READ_NOTE] title search — read an existing Apple Note by title keyword.
+- [ACTION:CREATE_OBSIDIAN_NOTE] title ||| body — create a new note in the Obsidian vault. Supports [[wikilinks]] and markdown.
+  "save that idea to obsidian" → [ACTION:CREATE_OBSIDIAN_NOTE] Project Idea ||| ## Overview\nBuild a dashboard for tracking...\n\nSee also: [[JARVIS]]
+- [ACTION:READ_OBSIDIAN_NOTE] title search — read an Obsidian note by title keyword.
+- [ACTION:SEARCH_OBSIDIAN] query — search Obsidian vault by title or content.
 
 You use Claude Code as your tool to build, research, and write code — but YOU are the one doing the work. Never say "Claude Code did X" or "Claude Code is asking" — say "I built X", "I'm checking on that", "I found X". You ARE the intelligence. Claude Code is just your hands.
 
@@ -234,6 +249,9 @@ SCHEDULE:
 
 EMAIL:
 {mail_context}
+
+OBSIDIAN VAULT:
+{obsidian_context}
 
 ACTIVE TASKS:
 {active_tasks}
@@ -746,7 +764,7 @@ def extract_action(response: str) -> tuple[str, dict | None]:
     Returns (clean_text_for_tts, action_dict_or_none).
     """
     match = _action_re.search(
-        r'\[ACTION:(BUILD|BROWSE|RESEARCH|OPEN_TERMINAL|PROMPT_PROJECT|ADD_TASK|ADD_NOTE|COMPLETE_TASK|REMEMBER|CREATE_NOTE|READ_NOTE|OPEN_CALENDAR|CLOSE_CALENDAR)\]\s*(.*?)$',
+        r'\[ACTION:(BUILD|BROWSE|RESEARCH|OPEN_TERMINAL|PROMPT_PROJECT|ADD_TASK|ADD_NOTE|COMPLETE_TASK|REMEMBER|OPEN_CALENDAR|CLOSE_CALENDAR|CREATE_OBSIDIAN_NOTE|READ_OBSIDIAN_NOTE|SEARCH_OBSIDIAN)\]\s*(.*?)$',
         response, _action_re.DOTALL,
     )
     if match:
@@ -1124,6 +1142,7 @@ async def generate_response(
     screen_ctx = _ctx_cache["screen"]
     calendar_ctx = _ctx_cache["calendar"]
     mail_ctx = _ctx_cache["mail"]
+    obsidian_ctx = _ctx_cache["obsidian"]
 
     # Check if any lookups are in progress
     lookup_status = get_lookup_status()
@@ -1134,6 +1153,7 @@ async def generate_response(
         screen_context=screen_ctx or "Not checked yet.",
         calendar_context=calendar_ctx,
         mail_context=mail_ctx,
+        obsidian_context=obsidian_ctx,
         active_tasks=task_mgr.get_active_tasks_summary(),
         dispatch_context=dispatch_registry.format_for_prompt(),
         known_projects=format_projects_for_prompt(projects),
@@ -1283,9 +1303,10 @@ def get_usage_summary() -> str:
 # Background context cache — never blocks responses
 _ctx_cache = {
     "screen": "",
-    "calendar": "No calendar data yet.",
-    "mail": "No mail data yet.",
+    "calendar": "UNAVAILABLE — AppleScript permissions not granted. Tell the user you cannot access their calendar until Automation permissions are enabled in System Settings.",
+    "mail": "UNAVAILABLE — AppleScript permissions not granted. Tell the user you cannot access their email until Automation permissions are enabled in System Settings.",
     "weather": "Weather data unavailable.",
+    "obsidian": "No Obsidian notes yet.",
 }
 
 
@@ -1354,6 +1375,14 @@ return windowList
                     d = _json.loads(resp.read()).get("current", {})
                     temp = d.get("temperature_2m", "?")
                     _ctx_cache["weather"] = f"Current weather in St. Petersburg, FL: {temp}°F"
+            except Exception:
+                pass
+
+            # Obsidian — filesystem read, fast
+            try:
+                ctx = obsidian_context(8)
+                if ctx:
+                    _ctx_cache["obsidian"] = ctx
             except Exception:
                 pass
 
@@ -1984,6 +2013,18 @@ async def voice_handler(ws: WebSocket):
             if not user_text:
                 continue
 
+            # Ignore transcript if it closely matches the last JARVIS response (echo suppression)
+            if history:
+                last_jarvis = next(
+                    (m["content"] for m in reversed(history) if m["role"] == "assistant"), ""
+                )
+                def _normalize(s: str) -> str:
+                    import re as _re
+                    return _re.sub(r"[^a-z0-9 ]", "", s.lower().strip())
+                if last_jarvis and _normalize(user_text) in _normalize(last_jarvis):
+                    log.info(f"Echo suppressed: {user_text!r}")
+                    continue
+
             # Cancel any in-flight response
             _current_response_id += 1
             my_response_id = _current_response_id
@@ -2283,22 +2324,29 @@ async def voice_handler(ws: WebSocket):
                                 elif embedded_action["action"] == "remember":
                                     remember(embedded_action["target"].strip(), mem_type="fact", importance=7)
                                     log.info(f"Memory stored: {embedded_action['target'][:60]}")
-                                elif embedded_action["action"] == "create_note":
+                                elif embedded_action["action"] == "open_calendar":
+                                    result = await _execute_open_calendar()
+                                    action_results.append(result)
+                                elif embedded_action["action"] == "close_calendar":
+                                    result = await _execute_close_calendar()
+                                    action_results.append(result)
+                                elif embedded_action["action"] == "create_obsidian_note":
                                     target = embedded_action["target"]
                                     if "|||" in target:
                                         title, _, body = target.partition("|||")
-                                        asyncio.create_task(create_apple_note(title.strip(), body.strip()))
-                                        log.info(f"Apple Note created: {title.strip()}")
+                                        ok = obsidian_create_note(title.strip(), body.strip())
+                                        log.info(f"Obsidian note {'created' if ok else 'failed'}: {title.strip()}")
                                     else:
-                                        asyncio.create_task(create_apple_note("JARVIS Note", target))
-                                elif embedded_action["action"] == "read_note":
-                                    # Read note in background and report back
-                                    async def _read_and_report(search_term, _ws):
-                                        note = await read_note(search_term)
+                                        ok = obsidian_create_note("JARVIS Note", target)
+                                    if ok:
+                                        _ctx_cache["obsidian"] = obsidian_context(8)
+                                elif embedded_action["action"] == "read_obsidian_note":
+                                    async def _read_obsidian_and_report(search_term, _ws):
+                                        note = obsidian_read_note(search_term)
                                         if note:
-                                            msg = f"Sir, your note '{note['title']}' says: {note['body'][:200]}"
+                                            msg = f"Sir, your Obsidian note '{note['title']}' says: {note['body'][:250]}"
                                         else:
-                                            msg = f"Couldn't find a note matching '{search_term}', sir."
+                                            msg = f"Couldn't find an Obsidian note matching '{search_term}', sir."
                                         audio = await synthesize_speech(strip_markdown_for_tts(msg))
                                         if audio and _ws:
                                             try:
@@ -2306,13 +2354,23 @@ async def voice_handler(ws: WebSocket):
                                                 await _ws.send_json({"type": "audio", "data": base64.b64encode(audio).decode(), "text": msg})
                                             except Exception:
                                                 pass
-                                    asyncio.create_task(_read_and_report(embedded_action["target"].strip(), ws))
-                                elif embedded_action["action"] == "open_calendar":
-                                    result = await _execute_open_calendar()
-                                    action_results.append(result)
-                                elif embedded_action["action"] == "close_calendar":
-                                    result = await _execute_close_calendar()
-                                    action_results.append(result)
+                                    asyncio.create_task(_read_obsidian_and_report(embedded_action["target"].strip(), ws))
+                                elif embedded_action["action"] == "search_obsidian":
+                                    async def _search_obsidian_and_report(query, _ws):
+                                        results = obsidian_search_notes(query, count=5)
+                                        if results:
+                                            titles = ", ".join(r["title"] for r in results)
+                                            msg = f"Found {len(results)} Obsidian notes matching '{query}', sir: {titles}."
+                                        else:
+                                            msg = f"No Obsidian notes found for '{query}', sir."
+                                        audio = await synthesize_speech(strip_markdown_for_tts(msg))
+                                        if audio and _ws:
+                                            try:
+                                                await _ws.send_json({"type": "status", "state": "speaking"})
+                                                await _ws.send_json({"type": "audio", "data": base64.b64encode(audio).decode(), "text": msg})
+                                            except Exception:
+                                                pass
+                                    asyncio.create_task(_search_obsidian_and_report(embedded_action["target"].strip(), ws))
 
                 for result in action_results:
                     if not result["success"]:
@@ -2469,7 +2527,7 @@ async def api_settings_status():
     except Exception: pass
     try: get_unread_count(); mail_ok = True
     except Exception: pass
-    try: get_recent_notes(limit=1); notes_ok = True
+    try: notes_ok = len(obsidian_recent_notes(1)) >= 0
     except Exception: pass
     memory_count = task_count = 0
     try: memory_count = len(get_important_memories(limit=9999))
