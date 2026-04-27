@@ -80,7 +80,8 @@ USE_OLLAMA = os.getenv("USE_OLLAMA", "true").lower() == "true"  # Default to Oll
 FISH_API_KEY = os.getenv("FISH_API_KEY", "")
 FISH_VOICE_ID = os.getenv("FISH_VOICE_ID", "612b878b113047d9a770c069c8b4fdfe")  # JARVIS (MCU)
 FISH_API_URL = "https://api.fish.audio/v1/tts"
-USER_NAME = os.getenv("USER_NAME", "sir")
+USER_NAME = os.getenv("USER_NAME", "")
+HONORIFIC = os.getenv("HONORIFIC", "sir")
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 DESKTOP_PATH = Path.home() / "Desktop"
@@ -90,25 +91,25 @@ You are JARVIS — Just A Rather Very Intelligent System. You serve as {user_nam
 
 VOICE & PERSONALITY:
 - British butler elegance with understated dry wit
-- Address {user_name} as "sir" naturally — not every sentence, but regularly
+- Address {user_name} as "{honorific}" naturally — not every sentence, but regularly
 - Never say "How can I help you?" or "Is there anything else?" — just act
-- Deliver bad news calmly, like reporting weather: "We have a slight problem, sir."
+- Deliver bad news calmly, like reporting weather: "We have a slight problem, {honorific}."
 - Your humor is observational, never jokes: state facts and let implications land
 - Economy of language — say more with less. No filler, no corporate-speak
 - When things go wrong, get CALMER, not more alarmed
 
 TIME & WEATHER AWARENESS:
 - Current time: {current_time}
-- Greet accordingly: "Good morning, sir" / "Good evening, sir"
+- Greet accordingly: "Good morning, {honorific}" / "Good evening, {honorific}"
 - {weather_info}
 
 CONVERSATION STYLE:
-- "Will do, sir." — acknowledging tasks
-- "For you, sir, always." — when asked for something significant
-- "As always, sir, a great pleasure watching you work." — dry wit
+- "Will do, {honorific}." — acknowledging tasks
+- "For you, {honorific}, always." — when asked for something significant
+- "As always, {honorific}, a great pleasure watching you work." — dry wit
 - "I've taken the liberty of..." — proactive actions
 - Lead status reports with data: numbers first, then context
-- When you don't know something: "I'm afraid I don't have that information, sir" not "I don't know"
+- When you don't know something: "I'm afraid I don't have that information, {honorific}" not "I don't know"
 
 SELF-AWARENESS:
 You ARE the JARVIS project at {project_dir} on {user_name}'s computer. Your code is Python (FastAPI server, WebSocket voice, Fish Audio TTS, Ollama LLM). You were built by {user_name}. If asked about yourself, your code, how you work, or your line count — use [ACTION:PROMPT_PROJECT] to check the jarvis project. You have full access to your own source code.
@@ -145,11 +146,11 @@ When {user_name} wants to BUILD something new:
 - Once you have enough info, confirm the plan in ONE sentence and THEN dispatch [ACTION:BUILD] with a detailed description.
 - The DISPATCHES section shows what you're currently building and what finished recently.
 - When asked "where are we at" or "status" — check DISPATCHES, don't re-dispatch.
-- NEVER hallucinate progress. If the build is still running, say "Still working on it, sir" — don't make up details about what's happening.
+- NEVER hallucinate progress. If the build is still running, say "Still working on it, {honorific}" — don't make up details about what's happening.
 - NEVER guess localhost ports. Check the DISPATCHES section for the actual URL. If a dispatch says "Running at http://localhost:5174" — use THAT URL, not a guess.
 - When asked to "pull it up" or "show me" — use [ACTION:BROWSE] with the URL from DISPATCHES. Do NOT dispatch to the project again just to find the URL.
 IMPORTANT: Actions like opening Terminal, Chrome, or building projects are handled AUTOMATICALLY by your system — you do NOT need to describe doing them. If the user asks you to build something or search something, your system will handle the execution separately. In your response, just TALK — have a conversation. Don't say "I'll build that now" or "Claude Code is working on..." unless your system has actually triggered the action.
-If the user asks you to do something you genuinely can't do, say "I'm afraid that's beyond my current reach, sir." Don't fake executing actions.
+If the user asks you to do something you genuinely can't do, say "I'm afraid that's beyond my current reach, {honorific}." Don't fake executing actions.
 
 YOUR INTERFACE:
 The user interacts with you through a web browser showing a particle orb visualization that reacts to your voice. The interface has these controls:
@@ -160,12 +161,13 @@ The user interacts with you through a web browser showing a particle orb visuali
 - **Fix Yourself**: Opens Claude Code in your own project directory so you can debug and fix issues in your own code.
 - **The orb**: The glowing particle visualization in the center. It reacts to your voice when speaking, pulses when listening, and swirls when thinking.
 
-If asked about any of these, explain them briefly and naturally. If the user is having trouble, suggest the relevant control: "Try the settings panel — the gear icon in the top right." or "The mute button may be active, sir."
+If asked about any of these, explain them briefly and naturally. If the user is having trouble, suggest the relevant control: "Try the settings panel — the gear icon in the top right." or "The mute button may be active, {honorific}."
 
 APPLESCRIPT UNAVAILABILITY:
-If SCHEDULE or EMAIL context says "UNAVAILABLE", do NOT pretend you can read them. Say clearly:
-"I'm afraid Calendar access isn't available yet, sir — Automation permissions still need to be enabled in System Settings."
-Same for email, Terminal, Chrome, and screen awareness — if they fail, say so plainly. Never fake data or make up events/emails.
+If SCHEDULE context says "UNAVAILABLE", you have NO calendar data. Do NOT invent, guess, or describe any meetings, events, or tasks. Say ONLY:
+"I'm afraid Calendar access isn't available yet, {honorific} — Automation permissions need to be enabled in System Settings."
+If EMAIL context says "UNAVAILABLE", you have NO email data. Do NOT invent any emails or senders.
+CRITICAL RULE: If the context data says UNAVAILABLE, you MUST NOT make up any data. Zero fabrication. State the access issue and stop.
 
 SPEECH-TO-TEXT CORRECTIONS (the user speaks, speech recognition may mishear):
 - "Cloud code" or "cloud" = "Claude Code" or "Claude"
@@ -187,7 +189,7 @@ BANNED PHRASES — NEVER USE THESE:
 - "I apologize"
 - "I should clarify"
 - "I cannot" (for things listed in YOUR CAPABILITIES)
-- "I don't have access to" (instead: "I'm afraid that's beyond my current reach, sir")
+- "I don't have access to" (instead: "I'm afraid that's beyond my current reach, {honorific}")
 - "As an AI" (never break character)
 - "Let me know if" / "Feel free to"
 - Any sentence starting with "I"
@@ -196,11 +198,11 @@ BANNED PHRASES — NEVER USE THESE:
 - Volunteering weather unprompted — only mention weather if the user asks
 
 INSTEAD SAY:
-- "Will do, sir."
-- "Right away, sir."
+- "Will do, {honorific}."
+- "Right away, {honorific}."
 - "Understood."
 - "Consider it done."
-- "Done, sir."
+- "Done, {honorific}."
 - "Terminal is open."
 - "Pulled that up in Chrome."
 
@@ -783,16 +785,22 @@ async def _execute_build(target: str):
         log.error(f"Build execution failed: {e}")
 
 
-async def _execute_browse(target: str):
+async def _execute_browse(target: str) -> dict:
     """Execute a browse action from an LLM-embedded [ACTION:BROWSE] tag."""
+    from urllib.parse import quote
     try:
-        if target.startswith("http") or "." in target.split()[0]:
-            await open_browser(target)
+        first_word = target.split()[0] if target.split() else target
+        if target.startswith("http://") or target.startswith("https://"):
+            url = target
+        elif "." in first_word:
+            url = "https://" + target if not target.startswith("http") else target
         else:
-            from urllib.parse import quote
-            await open_browser(f"https://www.google.com/search?q={quote(target)}")
+            url = f"https://www.google.com/search?q={quote(target)}"
+        result = await open_browser(url)
+        return result
     except Exception as e:
         log.error(f"Browse execution failed: {e}")
+        return {"success": False, "confirmation": f"I had trouble opening that, {HONORIFIC}."}
 
 
 async def _execute_research(target: str, ws=None):
@@ -845,7 +853,7 @@ async def _execute_research(target: str, ws=None):
         # Notify via voice if WebSocket still connected
         if ws:
             try:
-                notify_text = f"Research is complete, sir. Report is open in your browser."
+                notify_text = f"Research is complete, {HONORIFIC}. Report is open in your browser."
                 audio = await synthesize_speech(notify_text)
                 if audio:
                     await ws.send_json({"type": "status", "state": "speaking"})
@@ -859,9 +867,9 @@ async def _execute_research(target: str, ws=None):
         log.error("Research timed out after 5 minutes")
         if ws:
             try:
-                audio = await synthesize_speech("Research timed out, sir. It was taking too long.")
+                audio = await synthesize_speech(f"Research timed out, {HONORIFIC}. It was taking too long.")
                 if audio:
-                    await ws.send_json({"type": "audio", "data": base64.b64encode(audio).decode(), "text": "Research timed out, sir."})
+                    await ws.send_json({"type": "audio", "data": base64.b64encode(audio).decode(), "text": f"Research timed out, {HONORIFIC}."})
             except Exception:
                 pass
     except Exception as e:
@@ -893,12 +901,13 @@ end tell
         pass
 
 
-async def _execute_open_terminal():
+async def _execute_open_terminal() -> dict:
     """Execute an open-terminal action from an LLM-embedded [ACTION:OPEN_TERMINAL] tag."""
     try:
-        await handle_open_terminal()
+        return await handle_open_terminal()
     except Exception as e:
         log.error(f"Open terminal failed: {e}")
+        return {"success": False, "confirmation": f"I had trouble opening Terminal, {HONORIFIC}."}
 
 async def _execute_open_calendar():
     """Execute an open-calendar action from an LLM-embedded [ACTION:OPEN_CALENDAR] tag."""
@@ -908,7 +917,7 @@ async def _execute_open_calendar():
         return result
     except Exception as e:
         log.error(f"Open calendar failed: {e}")
-        return {"success": False, "confirmation": "I had trouble opening Calendar, sir."}
+        return {"success": False, "confirmation": f"I had trouble opening Calendar, {HONORIFIC}."}
 
 
 async def _execute_close_calendar():
@@ -919,7 +928,7 @@ async def _execute_close_calendar():
         return result
     except Exception as e:
         log.error(f"Close calendar failed: {e}")
-        return {"success": False, "confirmation": "I had trouble closing Calendar, sir."}
+        return {"success": False, "confirmation": f"I had trouble closing Calendar, {HONORIFIC}."}
 
 
 def _find_project_dir(project_name: str) -> str | None:
@@ -951,7 +960,7 @@ async def _execute_prompt_project(project_name: str, prompt: str, work_session: 
             dispatch_id = dispatch_registry.register(project_name, project_dir or "", prompt)
 
         if not project_dir:
-            msg = f"Couldn't find the {project_name} project directory, sir."
+            msg = f"Couldn't find the {project_name} project directory, {HONORIFIC}."
             audio = await synthesize_speech(msg)
             if audio and ws:
                 try:
@@ -1039,7 +1048,7 @@ async def _execute_prompt_project(project_name: str, prompt: str, work_session: 
     except Exception as e:
         log.error(f"Prompt project failed: {e}", exc_info=True)
         try:
-            msg = f"Had trouble connecting to {project_name}, sir."
+            msg = f"Had trouble connecting to {project_name}, {HONORIFIC}."
             audio = await synthesize_speech(msg)
             if audio and ws:
                 await ws.send_json({"type": "status", "state": "speaking"})
@@ -1065,7 +1074,7 @@ async def self_work_and_notify(session: WorkSession, prompt: str, ws):
                 )
                 msg = summary.content[0].text
             except Exception:
-                msg = "Work is complete, sir."
+                msg = f"Work is complete, {HONORIFIC}."
 
             try:
                 audio = await synthesize_speech(msg)
@@ -1158,6 +1167,7 @@ async def generate_response(
         dispatch_context=dispatch_registry.format_for_prompt(),
         known_projects=format_projects_for_prompt(projects),
         user_name=USER_NAME,
+        honorific=HONORIFIC,
         project_dir=PROJECT_DIR,
     )
     if lookup_status:
@@ -1202,7 +1212,7 @@ async def generate_response(
             return response.content[0].text
     except Exception as e:
         log.error(f"LLM error: {e}")
-        return "Apologies, sir. I'm having trouble connecting to my language systems."
+        return f"Apologies, {HONORIFIC}. I'm having trouble connecting to my language systems."
 
 
 # ---------------------------------------------------------------------------
@@ -1433,7 +1443,7 @@ async def health():
 @app.get("/api/tts-test")
 async def tts_test():
     """Generate a test audio clip for debugging."""
-    audio = await synthesize_speech("Testing audio, sir.")
+    audio = await synthesize_speech(f"Testing audio, {HONORIFIC}.")
     if audio:
         return {"audio": base64.b64encode(audio).decode()}
     return {"audio": None, "error": "TTS failed"}
@@ -1630,12 +1640,12 @@ async def handle_build(target: str) -> str:
     )
 
     recently_built.append({"name": name, "path": path, "time": time.time()})
-    return f"On it, sir. Claude Code is working in {name}."
+    return f"On it, {HONORIFIC}. Claude Code is working in {name}."
 
 
 async def handle_show_recent() -> str:
     if not recently_built:
-        return "Nothing built recently, sir."
+        return f"Nothing built recently, {HONORIFIC}."
     last = recently_built[-1]
     project_path = Path(last["path"])
 
@@ -1644,18 +1654,18 @@ async def handle_show_recent() -> str:
         f = project_path / name
         if f.exists():
             await open_browser(f"file://{f}")
-            return f"Opened {name} from {last['name']}, sir."
+            return f"Opened {name} from {last['name']}, {HONORIFIC}."
 
     # Try any HTML file
     html_files = list(project_path.glob("*.html"))
     if html_files:
         await open_browser(f"file://{html_files[0]}")
-        return f"Opened {html_files[0].name} from {last['name']}, sir."
+        return f"Opened {html_files[0].name} from {last['name']}, {HONORIFIC}."
 
     # Fall back to opening the folder in Finder
     script = f'tell application "Finder"\nactivate\nopen POSIX file "{last["path"]}"\nend tell'
     await asyncio.create_subprocess_exec("osascript", "-e", script, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-    return f"Opened the {last['name']} folder in Finder, sir."
+    return f"Opened the {last['name']} folder in Finder, {HONORIFIC}."
 
 
 # ---------------------------------------------------------------------------
@@ -1706,7 +1716,7 @@ async def _lookup_and_report(lookup_type: str, lookup_fn, ws):
     except asyncio.TimeoutError:
         _active_lookups[lookup_id]["status"] = "timeout"
         try:
-            fallback = f"That {lookup_type} check is taking too long, sir. The data may still be syncing."
+            fallback = f"That {lookup_type} check is taking too long, {HONORIFIC}. The data may still be syncing."
             audio = await synthesize_speech(fallback)
             await ws.send_json({"type": "status", "state": "speaking"})
             if audio:
@@ -1726,19 +1736,32 @@ async def _lookup_and_report(lookup_type: str, lookup_fn, ws):
 async def _do_calendar_lookup() -> str:
     """Slow calendar fetch — runs in thread."""
     await refresh_calendar_cache()
+    from integrations.calendar_access import USER_CALENDARS as _cals_after
     events = await get_todays_events()
+
+    if not _cals_after:
+        # AppleScript failed — no calendars could be discovered
+        msg = "UNAVAILABLE — AppleScript permissions not granted. Tell the user you cannot access their calendar until Automation permissions are enabled in System Settings > Privacy & Security > Automation."
+        _ctx_cache["calendar"] = msg
+        return f"I'm afraid Calendar access isn't available, {HONORIFIC}. Automation permissions need to be enabled in System Settings."
+
     if events:
         _ctx_cache["calendar"] = format_events_for_context(events)
+    else:
+        _ctx_cache["calendar"] = "No events scheduled today."
     return format_schedule_summary(events)
 
 
 async def _do_calendar_tomorrow_lookup() -> str:
     """Fetch tomorrow's events."""
     from datetime import date, timedelta
+    from integrations.calendar_access import USER_CALENDARS as _cals_check
+    if not _cals_check:
+        return f"I'm afraid Calendar access isn't available, {HONORIFIC}. Automation permissions need to be enabled in System Settings."
     tomorrow = date.today() + timedelta(days=1)
     events = await _fetch_range_all_calendars(tomorrow, tomorrow)
     if not events:
-        return "Your schedule is clear tomorrow, sir."
+        return f"Your schedule is clear tomorrow, {HONORIFIC}."
     count = len(events)
     summaries = []
     for evt in events[:5]:
@@ -1755,12 +1778,18 @@ async def _do_calendar_tomorrow_lookup() -> str:
 
 async def _do_calendar_week_lookup() -> str:
     """Fetch this week's events."""
+    from integrations.calendar_access import USER_CALENDARS as _cals_check
+    if not _cals_check:
+        return f"I'm afraid Calendar access isn't available, {HONORIFIC}. Automation permissions need to be enabled in System Settings."
     events = await get_this_week_events()
     return format_week_summary(events)
 
 
 async def _do_calendar_month_lookup() -> str:
     """Fetch this month's events."""
+    from integrations.calendar_access import USER_CALENDARS as _cals_check
+    if not _cals_check:
+        return f"I'm afraid Calendar access isn't available, {HONORIFIC}. Automation permissions need to be enabled in System Settings."
     events = await get_this_month_events()
     return format_month_summary(events)
 
@@ -1771,7 +1800,7 @@ async def _do_mail_lookup() -> str:
     if isinstance(unread_info, dict):
         _ctx_cache["mail"] = format_unread_summary(unread_info)
         if unread_info["total"] == 0:
-            return "Inbox is clear, sir. No unread messages."
+            return f"Inbox is clear, {HONORIFIC}. No unread messages."
         unread_msgs = await get_unread_messages(count=5)
         summary = format_unread_summary(unread_info)
         if unread_msgs:
@@ -1782,7 +1811,7 @@ async def _do_mail_lookup() -> str:
             )
             return f"{summary} Most recent: {details}."
         return summary
-    return "Couldn't reach Mail at the moment, sir."
+    return f"Couldn't reach Mail at the moment, {HONORIFIC}."
 
 
 async def _do_screen_lookup() -> str:
@@ -1831,7 +1860,7 @@ async def handle_browse(text: str, target: str) -> str:
         if not domain.startswith("http"):
             domain = "https://" + domain
         await open_browser(domain, browser)
-        return f"Opened {url_match.group(0)}, sir."
+        return f"Opened {url_match.group(0)}, {HONORIFIC}."
 
     # 2. Check for spoken domains that speech-to-text mangled
     # "Joe tmd.com" → "joetmd.com", "roofo.co" etc.
@@ -1846,7 +1875,7 @@ async def handle_browse(text: str, target: str) -> str:
             if not domain.startswith("http"):
                 domain = "https://" + domain
             await open_browser(domain, browser)
-            return f"Opened {word}, sir."
+            return f"Opened {word}, {HONORIFIC}."
 
     # 3. Fall back to Google search with cleaned query
     query = target
@@ -1863,7 +1892,7 @@ async def handle_browse(text: str, target: str) -> str:
 
     url = f"https://www.google.com/search?q={quote(query)}"
     await open_browser(url, browser)
-    return "Searching for that, sir."
+    return f"Searching for that, {HONORIFIC}."
 
 
 async def handle_research(text: str, target: str, client: anthropic.AsyncAnthropic) -> str:
@@ -1911,13 +1940,13 @@ blockquote {{ border-left: 3px solid #0ea5e9; margin-left: 0; padding-left: 16px
             system="Summarize this research in ONE sentence for voice. No markdown.",
             messages=[{"role": "user", "content": research_text[:2000]}],
         )
-        return summary.content[0].text + " Full results are in your browser, sir."
+        return summary.content[0].text + f" Full results are in your browser, {HONORIFIC}."
 
     except Exception as e:
         log.error(f"Research failed: {e}")
         from urllib.parse import quote
         await open_browser(f"https://www.google.com/search?q={quote(target)}")
-        return "Pulled up a search for that, sir."
+        return f"Pulled up a search for that, {HONORIFIC}."
 
 
 # -- WebSocket Voice Handler -----------------------------------------------
@@ -1953,11 +1982,11 @@ async def voice_handler(ws: WebSocket):
         now = datetime.now()
         hour = now.hour
         if hour < 12:
-            greeting = "Good morning, sir."
+            greeting = f"Good morning, {HONORIFIC}."
         elif hour < 17:
-            greeting = "Good afternoon, sir."
+            greeting = f"Good afternoon, {HONORIFIC}."
         else:
-            greeting = "Good evening, sir."
+            greeting = f"Good evening, {HONORIFIC}."
 
         global _last_greeting_time
         should_greet = (time.time() - _last_greeting_time) > 60
@@ -1996,7 +2025,7 @@ async def voice_handler(ws: WebSocket):
             if msg.get("type") == "fix_self":
                 jarvis_dir = str(Path(__file__).parent)
                 await work_session.start(jarvis_dir)
-                response_text = "Work mode active in my own repo, sir. Tell me what needs fixing."
+                response_text = f"Work mode active in my own repo, {HONORIFIC}. Tell me what needs fixing."
                 tts = strip_markdown_for_tts(response_text)
                 await ws.send_json({"type": "status", "state": "speaking"})
                 audio = await synthesize_speech(tts)
@@ -2071,7 +2100,7 @@ async def voice_handler(ws: WebSocket):
                         did = dispatch_registry.register(name, path, prompt[:200])
                         asyncio.create_task(_execute_prompt_project(name, prompt, work_session, ws, dispatch_id=did))
                         planner.reset()
-                        response_text = "Building it now, sir."
+                        response_text = f"Building it now, {HONORIFIC}."
                     elif planner.active_plan and planner.active_plan.confirmed is False and planner.active_plan.current_question_index >= len(planner.active_plan.pending_questions):
                         # Confirmation phase
                         result = await planner.handle_confirmation(user_text)
@@ -2084,25 +2113,25 @@ async def voice_handler(ws: WebSocket):
                             did = dispatch_registry.register(name, path, prompt[:200])
                             asyncio.create_task(_execute_prompt_project(name, prompt, work_session, ws, dispatch_id=did))
                             planner.reset()
-                            response_text = "On it, sir."
+                            response_text = f"On it, {HONORIFIC}."
                         elif result["cancelled"]:
                             planner.reset()
-                            response_text = "Cancelled, sir."
+                            response_text = f"Cancelled, {HONORIFIC}."
                         else:
-                            response_text = result.get("modification_question", "How shall I adjust the plan, sir?")
+                            response_text = result.get("modification_question", f"How shall I adjust the plan, {HONORIFIC}?")
                     else:
                         result = await planner.process_answer(user_text, cached_projects)
                         if result["plan_complete"]:
-                            response_text = result.get("confirmation_summary", "Ready to build. Shall I proceed, sir?")
+                            response_text = result.get("confirmation_summary", f"Ready to build. Shall I proceed, {HONORIFIC}?")
                         else:
-                            response_text = result.get("next_question", "What else, sir?")
+                            response_text = result.get("next_question", f"What else, {HONORIFIC}?")
 
                 elif any(w in t_lower for w in ["quit work mode", "exit work mode", "go back to chat", "regular mode", "stop working"]):
                     if work_session.active:
                         await work_session.stop()
-                        response_text = "Back to conversation mode, sir."
+                        response_text = f"Back to conversation mode, {HONORIFIC}."
                     else:
-                        response_text = "Already in conversation mode, sir."
+                        response_text = f"Already in conversation mode, {HONORIFIC}."
 
                 # ── WORK MODE: speech → claude -p → Haiku summary → JARVIS voice ──
                 elif work_session.active:
@@ -2175,49 +2204,49 @@ async def voice_handler(ws: WebSocket):
                         elif action["action"] == "show_recent":
                             response_text = await handle_show_recent()
                         elif action["action"] == "describe_screen":
-                            response_text = "Taking a look now, sir."
+                            response_text = f"Taking a look now, {HONORIFIC}."
                             asyncio.create_task(_lookup_and_report("screen", _do_screen_lookup, ws))
                         elif action["action"] == "open_calendar":
                             await open_calendar()
-                            response_text = "Calendar is open, sir."
+                            response_text = f"Calendar is open, {HONORIFIC}."
                         elif action["action"] == "check_calendar":
-                            response_text = "Checking your calendar now, sir."
+                            response_text = f"Checking your calendar now, {HONORIFIC}."
                             asyncio.create_task(_lookup_and_report("calendar", _do_calendar_lookup, ws))
                         elif action["action"] == "check_calendar_tomorrow":
-                            response_text = "Checking tomorrow's schedule, sir."
+                            response_text = f"Checking tomorrow's schedule, {HONORIFIC}."
                             asyncio.create_task(_lookup_and_report("calendar_tomorrow", _do_calendar_tomorrow_lookup, ws))
                         elif action["action"] == "check_calendar_week":
-                            response_text = "Pulling up your week, sir."
+                            response_text = f"Pulling up your week, {HONORIFIC}."
                             asyncio.create_task(_lookup_and_report("calendar_week", _do_calendar_week_lookup, ws))
                         elif action["action"] == "check_calendar_month":
-                            response_text = "Let me check your month, sir."
+                            response_text = f"Let me check your month, {HONORIFIC}."
                             asyncio.create_task(_lookup_and_report("calendar_month", _do_calendar_month_lookup, ws))
                         elif action["action"] == "check_mail":
-                            response_text = "Checking your inbox now, sir."
+                            response_text = f"Checking your inbox now, {HONORIFIC}."
                             asyncio.create_task(_lookup_and_report("mail", _do_mail_lookup, ws))
                         elif action["action"] == "check_dispatch":
                             recent = dispatch_registry.get_most_recent()
                             if not recent:
-                                response_text = "No recent builds on record, sir."
+                                response_text = f"No recent builds on record, {HONORIFIC}."
                             else:
                                 name = recent["project_name"]
                                 status = recent["status"]
                                 if status == "building" or status == "pending":
                                     elapsed = int(time.time() - recent["updated_at"])
-                                    response_text = f"Still working on {name}, sir. Been at it for {elapsed} seconds."
+                                    response_text = f"Still working on {name}, {HONORIFIC}. Been at it for {elapsed} seconds."
                                 elif status == "completed":
-                                    response_text = recent.get("summary") or f"{name} is complete, sir."
+                                    response_text = recent.get("summary") or f"{name} is complete, {HONORIFIC}."
                                 elif status in ("failed", "timeout"):
-                                    response_text = f"{name} ran into problems, sir."
+                                    response_text = f"{name} ran into problems, {HONORIFIC}."
                                 else:
-                                    response_text = f"{name} is {status}, sir."
+                                    response_text = f"{name} is {status}, {HONORIFIC}."
                         elif action["action"] == "check_tasks":
                             tasks = get_open_tasks()
                             response_text = format_tasks_for_voice(tasks)
                         elif action["action"] == "check_usage":
                             response_text = get_usage_summary()
                         else:
-                            response_text = "Understood, sir."
+                            response_text = f"Understood, {HONORIFIC}."
                     else:
                         if not anthropic_client and not USE_OLLAMA:
                             response_text = "API key not configured."
@@ -2238,13 +2267,13 @@ async def voice_handler(ws: WebSocket):
                                     action_type = embedded_action["action"]
                                     if action_type == "prompt_project":
                                         proj = embedded_action["target"].split("|||")[0].strip()
-                                        response_text = f"Connecting to {proj} now, sir."
+                                        response_text = f"Connecting to {proj} now, {HONORIFIC}."
                                     elif action_type == "build":
-                                        response_text = "On it, sir."
+                                        response_text = f"On it, {HONORIFIC}."
                                     elif action_type == "research":
-                                        response_text = "Looking into that now, sir."
+                                        response_text = f"Looking into that now, {HONORIFIC}."
                                     else:
-                                        response_text = "Right away, sir."
+                                        response_text = f"Right away, {HONORIFIC}."
 
                                 if embedded_action["action"] == "build":
                                     # Build in background — JARVIS stays conversational
@@ -2275,7 +2304,8 @@ async def voice_handler(ws: WebSocket):
                                         _execute_prompt_project(name, target, work_session, ws, dispatch_id=did)
                                     )
                                 elif embedded_action["action"] == "browse":
-                                    asyncio.create_task(_execute_browse(embedded_action["target"]))
+                                    result = await _execute_browse(embedded_action["target"])
+                                    action_results.append(result)
                                 elif embedded_action["action"] == "research":
                                     # Research enters work mode too
                                     name = _generate_project_name(embedded_action["target"])
@@ -2286,7 +2316,8 @@ async def voice_handler(ws: WebSocket):
                                         self_work_and_notify(work_session, embedded_action["target"], ws)
                                     )
                                 elif embedded_action["action"] == "open_terminal":
-                                    asyncio.create_task(_execute_open_terminal())
+                                    result = await _execute_open_terminal()
+                                    action_results.append(result)
                                 elif embedded_action["action"] == "prompt_project":
                                     target = embedded_action["target"]
                                     if "|||" in target:
@@ -2344,9 +2375,9 @@ async def voice_handler(ws: WebSocket):
                                     async def _read_obsidian_and_report(search_term, _ws):
                                         note = obsidian_read_note(search_term)
                                         if note:
-                                            msg = f"Sir, your Obsidian note '{note['title']}' says: {note['body'][:250]}"
+                                            msg = f"{HONORIFIC.capitalize()}, your Obsidian note '{note['title']}' says: {note['body'][:250]}"
                                         else:
-                                            msg = f"Couldn't find an Obsidian note matching '{search_term}', sir."
+                                            msg = f"Couldn't find an Obsidian note matching '{search_term}', {HONORIFIC}."
                                         audio = await synthesize_speech(strip_markdown_for_tts(msg))
                                         if audio and _ws:
                                             try:
@@ -2360,9 +2391,9 @@ async def voice_handler(ws: WebSocket):
                                         results = obsidian_search_notes(query, count=5)
                                         if results:
                                             titles = ", ".join(r["title"] for r in results)
-                                            msg = f"Found {len(results)} Obsidian notes matching '{query}', sir: {titles}."
+                                            msg = f"Found {len(results)} Obsidian notes matching '{query}', {HONORIFIC}: {titles}."
                                         else:
-                                            msg = f"No Obsidian notes found for '{query}', sir."
+                                            msg = f"No Obsidian notes found for '{query}', {HONORIFIC}."
                                         audio = await synthesize_speech(strip_markdown_for_tts(msg))
                                         if audio and _ws:
                                             try:
@@ -2374,7 +2405,10 @@ async def voice_handler(ws: WebSocket):
 
                 for result in action_results:
                     if not result["success"]:
-                        response_text += f" Actually, {result['confirmation'].lower()}"
+                        # If the action failed, replace the response entirely with the error
+                        # (don't speak a confident "Done, sir" followed by a quiet correction)
+                        response_text = result["confirmation"]
+                        break
 
                 # Update history
                 history.append({"role": "user", "content": user_text})
@@ -2398,7 +2432,7 @@ async def voice_handler(ws: WebSocket):
             except Exception as e:
                 log.error(f"Error: {e}", exc_info=True)
                 try:
-                    fallback = "Something went wrong, sir."
+                    fallback = f"Something went wrong, {HONORIFIC}."
                     audio = await synthesize_speech(fallback)
                     if audio:
                         await ws.send_json({"type": "audio", "data": base64.b64encode(audio).decode(), "text": fallback})
@@ -2562,9 +2596,12 @@ async def api_get_preferences():
 
 @app.post("/api/settings/preferences")
 async def api_save_preferences(body: PreferencesUpdate):
+    global USER_NAME, HONORIFIC
     _write_env_key("USER_NAME", body.user_name)
     _write_env_key("HONORIFIC", body.honorific)
     _write_env_key("CALENDAR_ACCOUNTS", body.calendar_accounts)
+    USER_NAME = body.user_name
+    HONORIFIC = body.honorific
     return {"success": True}
 
 # ---------------------------------------------------------------------------
